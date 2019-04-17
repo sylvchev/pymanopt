@@ -4,6 +4,7 @@ import warnings
 
 import numpy as np
 import numpy.linalg as la
+import scipy.linalg as sl
 import numpy.random as rnd
 import scipy as sp
 # Workaround for SciPy bug: https://github.com/scipy/scipy/pull/8082
@@ -15,6 +16,8 @@ except ImportError:
 from pymanopt.manifolds.manifold import Manifold
 from pymanopt.tools.multi import multiprod, multitransp, multisym, multilog
 
+def check_symmetric(a, tol=1e-8):
+    return np.allclose(a, a.T, atol=tol)
 
 class PositiveDefinite(Manifold):
     """
@@ -50,6 +53,11 @@ class PositiveDefinite(Manifold):
     def typicaldist(self):
         return self._typicaldist
 
+    def _sqrtm(self, x):
+        eigvals, eigvects = la.eigh(x)
+        eigvals = np.diag(np.sqrt(eigvals))
+        return eigvects @ eigvals @ eigvects.T
+
     def dist(self, x, y):
         # Adapted from equation 6.13 of "Positive definite matrices". Chol
         # decomp gives the same result as matrix sqrt. There may be a more
@@ -58,7 +66,13 @@ class PositiveDefinite(Manifold):
         c_inv = la.inv(c)
         logm = multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
                         pos_def=True)
+        # c_inv = la.inv(self._sqrtm(x))
+        # logm = multilog(c_inv @ y @ c_inv, pos_def=True)
+        # return la.norm(self._sqrtm(x) @ logm @ c_inv)
         return la.norm(logm)
+        # return la.norm(multiprod(multiprod(c, logm), c_inv))
+        # e, _ = la.eigh(la.inv(x) @ y)
+        # return np.sqrt((np.log(e) * np.log(e)).sum())
 
     def inner(self, x, u, v):
         return np.tensordot(la.solve(x, u), la.solve(x, v), axes=x.ndim)
@@ -78,8 +92,21 @@ class PositiveDefinite(Manifold):
     def retr(self, X, G):
         return self.exp(X, G)
 
+    def _trinner(self, x, y):
+        # np.tensordot(x, y, axes=x.ndim) slower, idem for np.trace(x @ y)
+        return x.flatten() @ y.flatten() 
+
+    def _trnorm(self, x):
+        return la.norm(x) # as fast as np.sqrt(x.flatten() @ x.flatten()) 
+    
     def norm(self, x, u):
-        return la.norm(la.solve(x, u))
+        # c_inv = la.inv(self._sqrtm(u))
+        # return np.trace((c_inv @ x @ c_inv).T @ c_inv @ x @ c_inv)
+        # return self._trnorm(la.solve(x, u))
+        # return la.norm(la.solve(x, u))
+        s = la.solve(x, u)
+        s = 0.5 * s + 0.5 * s.T
+        return la.norm(s)
 
     def rand(self):
         # The way this is done is arbitrary. I think the space of p.d.
@@ -136,6 +163,10 @@ class PositiveDefinite(Manifold):
         logm = multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
                         pos_def=True)
         return multiprod(multiprod(c, logm), multitransp(c))
+        # C = self._sqrtm(x)
+        # c_inv = la.inv(c)
+        # logm = multilog(c_inv @ y @ c_inv, pos_def=True)
+        # return c @ logm @ c
 
     def pairmean(self, X, Y):
         '''
