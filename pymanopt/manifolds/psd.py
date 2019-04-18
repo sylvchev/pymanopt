@@ -58,21 +58,36 @@ class PositiveDefinite(Manifold):
         eigvals = np.diag(np.sqrt(eigvals))
         return eigvects @ eigvals @ eigvects.T
 
+    def _invsqrtm(self, x):
+        eigvals, eigvects = la.eigh(x)
+        eigvals = np.diag(1. / np.sqrt(eigvals))
+        return eigvects @ eigvals @ eigvects.T
+
+    def _logm(self, x):
+        eigvals, eigvects = la.eigh(x)
+        eigvals = np.diag(np.log(eigvals))
+        return eigvects @ eigvals @ eigvects.T
+
+    def _projsym(self, x):
+        return 0.5 * x + 0.5 * x.T
+
     def dist(self, x, y):
         # Adapted from equation 6.13 of "Positive definite matrices". Chol
         # decomp gives the same result as matrix sqrt. There may be a more
         # efficient way to compute this!
-        c = la.cholesky(x)
-        c_inv = la.inv(c)
-        logm = multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
-                        pos_def=True)
+        # c = la.cholesky(x)
+        # c_inv = self._projsym(la.inv(c))
+        # logm = multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
+        #                 pos_def=True)
+        # return la.norm(logm)
         # c_inv = la.inv(self._sqrtm(x))
         # logm = multilog(c_inv @ y @ c_inv, pos_def=True)
         # return la.norm(self._sqrtm(x) @ logm @ c_inv)
-        return la.norm(logm)
         # return la.norm(multiprod(multiprod(c, logm), c_inv))
         # e, _ = la.eigh(la.inv(x) @ y)
         # return np.sqrt((np.log(e) * np.log(e)).sum())
+        invs = self._invsqrtm(x)
+        return la.norm(self._logm(invs @ y @ invs))
 
     def inner(self, x, u, v):
         return np.tensordot(la.solve(x, u), la.solve(x, v), axes=x.ndim)
@@ -104,10 +119,20 @@ class PositiveDefinite(Manifold):
         # return np.trace((c_inv @ x @ c_inv).T @ c_inv @ x @ c_inv)
         # return self._trnorm(la.solve(x, u))
         # return la.norm(la.solve(x, u))
-        s = la.solve(x, u)
-        s = 0.5 * s + 0.5 * s.T
-        return la.norm(s)
-
+        # s = la.solve(x, u)
+        # s = 0.5 * s + 0.5 * s.T
+        # return la.norm(s)
+        # c = la.cholesky(x)
+        # c_inv = self._projsym(la.inv(c))
+        # logm =  self._projsym(multilog(multiprod(multiprod(c_inv, u), multitransp(c_inv)),
+        #                                pos_def=True))
+        # return la.norm(logm)
+        c = self._sqrtm(x)
+        c_inv = self._invsqrtm(x)
+        a = c_inv @ u @ c_inv
+        return np.trace(a @ a.T)
+        
+        
     def rand(self):
         # The way this is done is arbitrary. I think the space of p.d.
         # matrices would have infinite measure w.r.t. the Riemannian metric
@@ -158,15 +183,18 @@ class PositiveDefinite(Manifold):
         #    return multiprod(multiprod(c, e), multitransp(c))
 
     def log(self, x, y):
-        c = la.cholesky(x)
-        c_inv = la.inv(c)
-        logm = multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
-                        pos_def=True)
-        return multiprod(multiprod(c, logm), multitransp(c))
+        # c = la.cholesky(x)
+        # c_inv = self._projsym(la.inv(c))
+        # logm =  self._projsym(multilog(multiprod(multiprod(c_inv, y), multitransp(c_inv)),
+        #                 pos_def=True))
+        # return  self._projsym(multiprod(multiprod(c, logm), multitransp(c)))
         # C = self._sqrtm(x)
         # c_inv = la.inv(c)
         # logm = multilog(c_inv @ y @ c_inv, pos_def=True)
         # return c @ logm @ c
+        s, invs = self._sqrtm(x), self._invsqrtm(x)
+        return s @ self._logm(invs @ y @ invs) @ s
+        
 
     def pairmean(self, X, Y):
         '''
