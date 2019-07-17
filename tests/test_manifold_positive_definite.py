@@ -8,7 +8,7 @@ import numpy.testing as np_testing
 import scipy as sp
 
 from pymanopt.manifolds import PositiveDefinite
-from pymanopt.tools.multi import multiprod, multisym
+from pymanopt.tools.multi import multiprod, multisym, multitransp
 
 
 class TestSinglePositiveDefiniteManifold(unittest.TestCase):
@@ -48,6 +48,20 @@ class TestSinglePositiveDefiniteManifold(unittest.TestCase):
         d = np.sqrt((np.log(sp.linalg.eigvalsh(x, y))**2).sum())
         np_testing.assert_almost_equal(man.dist(x, y), d)
 
+        # check that dist is consistent with log
+        np_testing.assert_almost_equal(man.dist(x, y),
+                                       man.norm(x, man.log(x, y)))
+
+        # Test invariance under inversion
+        np_testing.assert_almost_equal(man.dist(x, y),
+                                       man.dist(la.inv(y), la.inv(x)))
+
+        # Test congruence-invariance
+        a = rnd.randn(self.n, self.n)  # must be invertible
+        axa = multiprod(multiprod(a, x), multitransp(a))
+        aya = multiprod(multiprod(a, y), multitransp(a))
+        np_testing.assert_almost_equal(man.dist(x, y), man.dist(axa, aya))
+
     def test_exp(self):
         man = self.man
         x = man.rand()
@@ -69,6 +83,25 @@ class TestSinglePositiveDefiniteManifold(unittest.TestCase):
         np_testing.assert_almost_equal(1, man.norm(x, u))
         assert la.norm(u - v) > 1e-3
 
+    def test_norm(self):
+        man = self.man
+        x = man.rand()
+        np.testing.assert_almost_equal(man.norm(np.eye(self.n), x), la.norm(x))
+
+    def test_exp_log_inverse(self):
+        man = self.man
+        x = man.rand()
+        y = man.rand()
+        u = man.log(x, y)
+        np_testing.assert_allclose(man.exp(x, u), y)
+
+    def test_log_exp_inverse(self):
+        man = self.man
+        x = man.rand()
+        u = man.randvec(x)
+        y = man.exp(x, u)
+        np_testing.assert_allclose(man.log(x, y), u)
+
 
 class TestMultiPositiveDefiniteManifold(unittest.TestCase):
     def setUp(self):
@@ -87,6 +120,7 @@ class TestMultiPositiveDefiniteManifold(unittest.TestCase):
         np_testing.assert_equal(man.typicaldist, np.sqrt(man.dim))
 
     def test_dist(self):
+        # n = self.n
         man = self.man
         x = man.rand()
         y = man.rand()
@@ -140,9 +174,8 @@ class TestMultiPositiveDefiniteManifold(unittest.TestCase):
     def test_norm(self):
         man = self.man
         x = man.rand()
-        a = np.random.randn(self.k, self.n, self.n)
-        np_testing.assert_almost_equal(la.norm(a), man.norm(x,
-                                                            multiprod(x, a)))
+        Id = np.array(self.k * [np.eye(self.n)])
+        np.testing.assert_almost_equal(man.norm(Id, x), la.norm(x))
 
     def test_rand(self):
         # Just test that rand returns a point on the manifold and two
